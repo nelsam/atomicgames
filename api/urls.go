@@ -1,10 +1,12 @@
 package api
 
 import (
-    "api/home"
-    "base"
+	"net/http"
+	"github.com/stretchr/goweb"
 )
 
-var Handlers = []base.PathHandler{
-    base.PathHandler{"/home", home.MakeHomeHandler("Herro.")},
+func init() {
+	var homeController RestController = new(HomeController)
+	http.Handle("/", goweb.DefaultHttpHandler())
+	goweb.MapController(homeController, homeController.MatchAccept)
 }

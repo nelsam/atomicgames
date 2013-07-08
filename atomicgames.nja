@@ -1,6 +1,6 @@
 {
   "mainFile": "", 
-  "use-tabs": false, 
+  "use-tabs": true, 
   "venv": "", 
   "relatedProjects": [], 
   "name": "atomicgames", 
