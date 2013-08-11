@@ -1,12 +1,15 @@
 package api
 
 import (
-	"strings"
-	"appengine"
-	"github.com/nelsam/atomicgames"
+	"github.com/nelsam/atomicgames/settings"
 	"github.com/stretchr/goweb/context"
 	"github.com/stretchr/goweb/handlers"
+	"strings"
 )
+
+// The base path for all API calls.  Every API call should
+// be in a sub-path of this path.
+const baseApiPath string = "/api"
 
 // Our RESTful controllers have a MatchAccept method, matching the
 // definition of a MatcherFunc from the goweb package, which reads
@@ -26,19 +29,9 @@ type RestController interface {
 // BaseRestController.MatchAccept, matching your controller's version
 // in the Accept header.
 type BaseRestController struct {
-	appengineContext appengine.Context
 	requestedVersion string
-	MatchedAccept string
-}
-
-// Uses a Context argument (from the goweb.context package) to create
-// the appengine context, which can be used for logging and various
-// other things related to the appengine server.
-func (controller *BaseRestController) AppengineContext(ctx context.Context) appengine.Context {
-	if controller.appengineContext == nil {
-		controller.appengineContext = appengine.NewContext(ctx.HttpRequest())
-	}
-	return controller.appengineContext
+	allowedVersions  []string
+	MatchedAccept    string
 }
 
 // Makes sure that the Vary header is set to Accept
@@ -51,16 +44,23 @@ func (controller *BaseRestController) After(ctx context.Context) error {
 func (controller *BaseRestController) RequestedVersion() string {
 	if controller.requestedVersion == "" {
 		version_end := strings.LastIndex(controller.MatchedAccept, "+")
+		if version_end == -1 {
+			version_end = len(controller.MatchedAccept)
+		}
 		acceptToMatch := controller.MatchedAccept[:version_end]
-		
-		version_start := strings.LastIndex(acceptToMatch, "-") + 1
-		version := acceptToMatch[version_start:]
-		
+
+		version := strings.Replace(acceptToMatch, settings.ApiResponseType, "", 1)
+
+		version = strings.TrimPrefix(version, "-")
 		version = strings.TrimPrefix(version, "version")
 		version = strings.TrimPrefix(version, "v")
 		version = strings.TrimSpace(version)
-		
-		controller.requestedVersion = version
+
+		if version == "" {
+			controller.requestedVersion = "stable"
+		} else {
+			controller.requestedVersion = version
+		}
 	}
 	return controller.requestedVersion
 }
@@ -80,12 +80,30 @@ func (controller *BaseRestController) MatchVersions(versions []string) bool {
 	return found
 }
 
+// The base case for all RESTful controllers is that they match
+// the "stable" version - which can be explicitly requested
+// in the Accept header, or will be the default for any requests
+// without an explicit version.
+func (controller *BaseRestController) Versions() []string {
+	if controller.allowedVersions == nil {
+		controller.allowedVersions = []string{"stable"}
+	}
+	return controller.allowedVersions
+}
+
+// The base path for API calls is returned here.  API
+// controllers should override this method, appending their
+// relative path to the base path.
+func (baseHandler *BaseRestController) Path() string {
+	return baseApiPath
+}
+
 // Searches for an entry in the Accept header that matches
-// atomicgames.ApiResponseType.  If a matching entry is found, it is stored
+// settings.ApiResponseType.  If a matching entry is found, it is stored
 // as BaseRestController.MatchedAccept.
 func (controller *BaseRestController) MatchAccept(ctx context.Context) (handlers.MatcherFuncDecision, error) {
 	accept := ctx.HttpRequest().Header.Get("Accept")
-	matchedAcceptIndex := strings.Index(accept, atomicgames.ApiResponseType)
+	matchedAcceptIndex := strings.Index(accept, settings.ApiResponseType)
 	switch matchedAcceptIndex {
 	case -1:
 		return handlers.NoMatch, nil
